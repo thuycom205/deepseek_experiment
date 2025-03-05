@@ -85,7 +85,6 @@ def main():
         n_routed_experts=4,
         n_shared_experts=1,
         n_activated_experts=2,
-        dtype="bf16"
     )    
     model = Transformer(args).cuda()
 
