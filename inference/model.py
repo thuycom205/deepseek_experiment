@@ -495,6 +495,17 @@ class MLA(nn.Module):
             
             # Process kv and k_pe
             kv = self.wkv_a(x).view(bsz, seqlen, self.n_local_heads, -1)
+            
+            print ("kv.shape")
+            print(kv.shape)
+            
+            print ("self.qk_nope_head_dim")
+            
+            print (self.qk_nope_head_dim)
+            
+            print ("self.v_head_dim")
+            
+            print (self.v_head_dim)
             k_nope, v = torch.split(kv, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
             k_pe = apply_rotary_emb(k_pe.unsqueeze(2), freqs_cis)
                         
