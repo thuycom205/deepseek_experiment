@@ -1,51 +1,85 @@
 import torch
-from torch.utils.data import DataLoader
-from transformers import AutoTokenizer
+from torch.utils.data import DataLoader, Dataset
+import sys
 
+sys.path.append('/content/deepseek_experiment')
 
 from inference.model import Transformer, ModelArgs
 from inference.kernel import act_quant, weight_dequant, fp8_gemm
 
-import sys
-sys.path.append('/content/deepseek_experiment')
+# ---- SimpleTokenizer Class ----
+class SimpleTokenizer:
+    def __init__(self):
+        self.vocab = {"[PAD]": 0, "[UNK]": 1}
+        self.reverse_vocab = {0: "[PAD]", 1: "[UNK]"}
 
-def load_data(tokenizer, file_path, max_seq_len=128):
-    # Set pad_token to eos_token or a custom token like [PAD]
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token  # Or use tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+    def add_tokens(self, texts):
+        for text in texts:
+            for token in text.split():
+                if token not in self.vocab:
+                    idx = len(self.vocab)
+                    self.vocab[token] = idx
+                    self.reverse_vocab[idx] = token
 
+    def encode(self, text, max_length=128):
+        tokens = text.split()[:max_length]
+        ids = [self.vocab.get(token, 1) for token in tokens]
+        ids += [0] * (max_length - len(ids))  # Pad to max length
+        return ids
+
+    def decode(self, token_ids):
+        return " ".join(self.reverse_vocab.get(id, "[UNK]") for id in token_ids)
+
+# ---- Dataset Class ----
+class TextDataset(Dataset):
+    def __init__(self, texts, tokenizer, max_seq_len=128):
+        self.tokenizer = tokenizer
+        self.texts = texts
+        self.max_seq_len = max_seq_len
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        return torch.tensor(self.tokenizer.encode(self.texts[idx], self.max_seq_len), dtype=torch.long)
+
+# ---- Data Loading ----
+def load_data(file_path, max_seq_len=128):
     with open(file_path, 'r') as f:
         texts = [line.strip() for line in f.readlines()]
 
-    # Now the tokenizer will handle padding correctly
-    tokenized = tokenizer(texts, max_length=max_seq_len, truncation=True, padding='max_length')
+    tokenizer = SimpleTokenizer()
+    tokenizer.add_tokens(texts)
 
-    tensor_data = torch.tensor(tokenized['input_ids'], dtype=torch.long)
-    return DataLoader(tensor_data, batch_size=1, shuffle=True)
+    dataset = TextDataset(texts, tokenizer, max_seq_len=max_seq_len)
+    return DataLoader(dataset, batch_size=1, shuffle=True), tokenizer
 
-
+# ---- Training Loop ----
 def train_one_epoch(model, dataloader, optimizer, criterion):
     model.train()
     for batch in dataloader:
         batch = batch.cuda()
         optimizer.zero_grad()
         logits = model(batch)
-        loss = criterion(logits.view(-1, logits.size(-1)), batch.view(-1))  # simple LM loss
+
+        # Shift batch to predict next token (causal language modeling)
+        loss = criterion(logits.view(-1, logits.size(-1)), batch.view(-1))
         loss.backward()
         optimizer.step()
+
         print(f"Loss: {loss.item()}")
 
+# ---- Main ----
 def main():
-    tokenizer = AutoTokenizer.from_pretrained('gpt2')  # or custom tokenizer
-    dataloader = load_data(tokenizer, 'sample_data.txt')
+    dataloader, tokenizer = load_data('sample_data.txt')
 
-    args = ModelArgs()
+    args = ModelArgs(vocab_size=len(tokenizer.vocab))  # Set correct vocab size
     model = Transformer(args).cuda()
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
     criterion = torch.nn.CrossEntropyLoss()
 
-    for epoch in range(3):  # 3 epochs for demo
+    for epoch in range(3):
         train_one_epoch(model, dataloader, optimizer, criterion)
         torch.save(model.state_dict(), f'checkpoint_epoch{epoch}.pt')
 
