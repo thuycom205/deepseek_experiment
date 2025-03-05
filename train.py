@@ -58,7 +58,22 @@ def load_wikitext2(max_seq_len=128):
     return DataLoader(dataset, batch_size=1, shuffle=True), tokenizer
 
 # Rest of the code remains the same as previous version...
+def train_one_epoch(model, dataloader, optimizer, criterion, device):
+    model.train()
+    for batch in dataloader:
+        batch = batch.to(device)
+        optimizer.zero_grad()
+        
+        # Forward pass with full sequence
+        logits = model(batch[:, :-1])  # Exclude last token for inputs
+        targets = batch[:, 1:].contiguous().view(-1)  # Predict next tokens
+        
+        loss = criterion(logits.view(-1, logits.size(-1)), targets)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
 
+        print(f"Loss: {loss.item()}")
 # ---- Modified Main Function ----
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
