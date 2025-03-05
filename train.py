@@ -10,13 +10,19 @@ import sys
 sys.path.append('/content/deepseek_experiment')
 
 def load_data(tokenizer, file_path, max_seq_len=128):
+    # Set pad_token to eos_token or a custom token like [PAD]
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token  # Or use tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+
     with open(file_path, 'r') as f:
         texts = [line.strip() for line in f.readlines()]
-    tokenized = [tokenizer.encode(t, max_length=max_seq_len, truncation=True, padding='max_length') for t in texts]
-    tokenized.add_special_tokens({'pad_token': '[PAD]'})
 
-    tensor_data = torch.tensor(tokenized, dtype=torch.long)
+    # Now the tokenizer will handle padding correctly
+    tokenized = tokenizer(texts, max_length=max_seq_len, truncation=True, padding='max_length')
+
+    tensor_data = torch.tensor(tokenized['input_ids'], dtype=torch.long)
     return DataLoader(tensor_data, batch_size=4, shuffle=True)
+
 
 def train_one_epoch(model, dataloader, optimizer, criterion):
     model.train()
