@@ -494,10 +494,10 @@ class MLA(nn.Module):
             q_pe = apply_rotary_emb(q_pe, freqs_cis)
             
             # Process kv and k_pe
-            kv = self.wkv_a(x)
-            kv, k_pe = torch.split(kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+            kv = self.wkv_a(x).view(bsz, seqlen, self.n_local_heads, -1)
+            k_nope, v = torch.split(kv, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
             k_pe = apply_rotary_emb(k_pe.unsqueeze(2), freqs_cis)
-            
+                        
             # Compute scores directly without caching
             scores = (
                 torch.einsum("bshc,bthc->bsht", q_nope, kv) +  # q_nope @ k_nope
