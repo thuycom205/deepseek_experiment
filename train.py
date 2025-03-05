@@ -1,28 +1,62 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
 import sys
-from torchtext.datasets import WikiText2
+
+from datasets import load_dataset  # Using Hugging Face Datasets
 
 sys.path.append('/content/deepseek_experiment')
 
-# ---- Modified Data Loading using WikiText-2 ----
+
+# ---- SimpleTokenizer Class (updated) ----
+class SimpleTokenizer:
+    def __init__(self):
+        self.vocab = {"[PAD]": 0, "[UNK]": 1}
+        self.reverse_vocab = {0: "[PAD]", 1: "[UNK]"}
+        self.unk_token = "[UNK]"
+
+    def add_tokens(self, texts):
+        for text in texts:
+            for token in text.split():
+                if token not in self.vocab:
+                    idx = len(self.vocab)
+                    self.vocab[token] = idx
+                    self.reverse_vocab[idx] = token
+
+    def encode(self, text, max_length=128):
+        tokens = text.split()[:max_length]
+        return [self.vocab.get(token, self.vocab[self.unk_token]) for token in tokens] + [0]*(max_length - len(tokens))
+
+    def decode(self, token_ids):
+        return " ".join(self.reverse_vocab.get(id, self.unk_token) for id in token_ids)
+
+# ---- Dataset Class (no change) ----
+class TextDataset(Dataset):
+    def __init__(self, texts, tokenizer, max_seq_len=128):
+        self.tokenizer = tokenizer
+        self.texts = texts
+        self.max_seq_len = max_seq_len
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        return torch.tensor(self.tokenizer.encode(self.texts[idx], self.max_seq_len), dtype=torch.long)
+
+# ---- New Data Loading with Hugging Face ----
 def load_wikitext2(max_seq_len=128):
-    # Load WikiText-2 dataset
-    train_iter, val_iter, test_iter = WikiText2()
+    # Load dataset from Hugging Face
+    dataset = load_dataset("wikitext", "wikitext-2-raw-v1")
+    texts = [text for text in dataset["train"]["text"] if text.strip()]
     
-    # Combine all training data
-    texts = []
-    for line in train_iter:
-        if line.strip():  # Skip empty lines
-            texts.append(line.strip())
-    
-    # Initialize tokenizer and build vocabulary
+    # Initialize tokenizer
     tokenizer = SimpleTokenizer()
     tokenizer.add_tokens(texts)
     
-    # Create dataset
+    # Create dataloader
     dataset = TextDataset(texts, tokenizer, max_seq_len=max_seq_len)
     return DataLoader(dataset, batch_size=1, shuffle=True), tokenizer
+
+# Rest of the code remains the same as previous version...
 
 # ---- Modified Main Function ----
 def main():
