@@ -72,20 +72,23 @@ def train_one_epoch(model, dataloader, optimizer, criterion):
 # ---- Main ----
 def main():
     dataloader, tokenizer = load_data('sample_data.txt')
-
     args = ModelArgs(
-        max_batch_size=1,
-        max_seq_len=512,
-        vocab_size=len(tokenizer.vocab),
-        dim=256,
-        inter_dim=512,
-        moe_inter_dim=128,
-        n_layers=4,
-        n_heads=4,
-        n_routed_experts=4,
-        n_shared_experts=1,
-        n_activated_experts=2,
-    )    
+    max_batch_size=1,
+    max_seq_len=512,
+    vocab_size=len(tokenizer.vocab),
+    dim=256,
+    inter_dim=512,
+    moe_inter_dim=128,
+    n_layers=4,
+    n_heads=4,
+    n_routed_experts=4,
+    n_shared_experts=1,
+    n_activated_experts=2,
+    dtype="bf16",  # <-- This was missing
+)
+
+
+    
     model = Transformer(args).cuda()
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
