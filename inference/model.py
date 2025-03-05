@@ -101,6 +101,8 @@ class ParallelEmbedding(nn.Module):
         self.vocab_start_idx = rank * self.part_vocab_size
         self.vocab_end_idx = self.vocab_start_idx + self.part_vocab_size
         self.weight = nn.Parameter(torch.empty(self.part_vocab_size, self.dim))
+        
+        nn.init.normal_(self.weight, mean=0.0, std=0.02)  # Standard initialization for embeddings
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -179,6 +181,11 @@ class Linear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.weight = nn.Parameter(torch.empty(out_features, in_features, dtype=dtype or Linear.dtype))
+        
+        # Initialize weights properly
+
+        nn.init.kaiming_normal_(self.weight, mode='fan_out', nonlinearity='relu')
+
         if self.weight.element_size() == 1:
             scale_out_features = (out_features + block_size - 1) // block_size
             scale_in_features = (in_features + block_size - 1) // block_size
@@ -187,6 +194,8 @@ class Linear(nn.Module):
             self.register_parameter("scale", None)
         if bias:
             self.bias = nn.Parameter(torch.empty(out_features))
+            nn.init.zeros_(self.bias)  # Initialize bias to 0
+
         else:
             self.register_parameter("bias", None)
 
@@ -434,9 +443,15 @@ class MLA(nn.Module):
             self.wq_a = Linear(self.dim, self.q_lora_rank)
             self.q_norm = RMSNorm(self.q_lora_rank)
             self.wq_b = ColumnParallelLinear(self.q_lora_rank, self.n_heads * self.qk_head_dim)
-        self.wkv_a = Linear(self.dim, self.kv_lora_rank + self.qk_rope_head_dim)
+        # self.wkv_a = Linear(self.dim, self.kv_lora_rank + self.qk_rope_head_dim)
+        self.wkv_a = Linear(self.dim, self.kv_lora_rank)  # Remove qk_rope_head_dim
+
         self.kv_norm = RMSNorm(self.kv_lora_rank)
-        self.wkv_b = ColumnParallelLinear(self.kv_lora_rank, self.n_heads * (self.qk_nope_head_dim + self.v_head_dim))
+        # self.wkv_b = ColumnParallelLinear(self.kv_lora_rank, self.n_heads * (self.qk_nope_head_dim + self.v_head_dim))
+        self.wkv_b = ColumnParallelLinear(
+                        self.kv_lora_rank, 
+                        self.n_heads * (self.qk_nope_head_dim + self.v_head_dim)  # Now matches split
+                    )
         self.wo = RowParallelLinear(self.n_heads * self.v_head_dim, self.dim)
         self.softmax_scale = self.qk_head_dim ** -0.5
         if args.max_seq_len > args.original_seq_len:

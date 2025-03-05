@@ -101,7 +101,7 @@ def main():
 
     model = Transformer(args).to(device).to(dtype)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.01)    
     criterion = torch.nn.CrossEntropyLoss()
 
     for epoch in range(3):
