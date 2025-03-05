@@ -5,9 +5,8 @@ import sys
 sys.path.append('/content/deepseek_experiment')
 
 from inference.model import Transformer, ModelArgs
-from inference.kernel import act_quant, weight_dequant, fp8_gemm
 
-# ---- SimpleTokenizer Class ----
+# ---- SimpleTokenizer Class (no change needed) ----
 class SimpleTokenizer:
     def __init__(self):
         self.vocab = {"[PAD]": 0, "[UNK]": 1}
@@ -30,7 +29,7 @@ class SimpleTokenizer:
     def decode(self, token_ids):
         return " ".join(self.reverse_vocab.get(id, "[UNK]") for id in token_ids)
 
-# ---- Dataset Class ----
+# ---- Dataset Class (no change needed) ----
 class TextDataset(Dataset):
     def __init__(self, texts, tokenizer, max_seq_len=128):
         self.tokenizer = tokenizer
@@ -43,7 +42,7 @@ class TextDataset(Dataset):
     def __getitem__(self, idx):
         return torch.tensor(self.tokenizer.encode(self.texts[idx], self.max_seq_len), dtype=torch.long)
 
-# ---- Data Loading ----
+# ---- Data Loading (no change needed) ----
 def load_data(file_path, max_seq_len=128):
     with open(file_path, 'r') as f:
         texts = [line.strip() for line in f.readlines()]
@@ -54,11 +53,11 @@ def load_data(file_path, max_seq_len=128):
     dataset = TextDataset(texts, tokenizer, max_seq_len=max_seq_len)
     return DataLoader(dataset, batch_size=1, shuffle=True), tokenizer
 
-# ---- Training Loop ----
-def train_one_epoch(model, dataloader, optimizer, criterion):
+# ---- Training Loop (adjust device handling) ----
+def train_one_epoch(model, dataloader, optimizer, criterion, device):
     model.train()
     for batch in dataloader:
-        batch = batch.cuda()
+        batch = batch.to(device)
         optimizer.zero_grad()
         logits = model(batch)
 
@@ -69,34 +68,37 @@ def train_one_epoch(model, dataloader, optimizer, criterion):
 
         print(f"Loss: {loss.item()}")
 
-# ---- Main ----
+# ---- Main (adjust device handling + fallback to float32) ----
 def main():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Use bfloat16 if available on device, otherwise fallback to float32
+    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+
     dataloader, tokenizer = load_data('sample_data.txt')
+
     args = ModelArgs(
-    max_batch_size=1,
-    max_seq_len=512,
-    vocab_size=len(tokenizer.vocab),
-    dim=256,
-    inter_dim=512,
-    moe_inter_dim=128,
-    n_layers=4,
-    n_heads=4,
-    n_routed_experts=4,
-    n_shared_experts=1,
-    n_activated_experts=2,
-    dtype="bf16",  # <-- This was missing
-)
+        max_batch_size=1,
+        max_seq_len=512,
+        vocab_size=len(tokenizer.vocab),
+        dim=256,
+        inter_dim=512,
+        moe_inter_dim=128,
+        n_layers=4,
+        n_heads=4,
+        n_routed_experts=4,
+        n_shared_experts=1,
+        n_activated_experts=2,
+        dtype="bf16" if dtype == torch.bfloat16 else "fp32",
+    )
 
-
-    
-    model = Transformer(args).cuda().to(torch.bfloat16)
-
+    model = Transformer(args).to(device).to(dtype)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
     criterion = torch.nn.CrossEntropyLoss()
 
     for epoch in range(3):
-        train_one_epoch(model, dataloader, optimizer, criterion)
+        train_one_epoch(model, dataloader, optimizer, criterion, device)
         torch.save(model.state_dict(), f'checkpoint_epoch{epoch}.pt')
 
 if __name__ == "__main__":
