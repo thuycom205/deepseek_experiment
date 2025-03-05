@@ -2,7 +2,12 @@ import torch
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
+
 from inference.model import Transformer, ModelArgs
+from inference.kernel import act_quant, weight_dequant, fp8_gemm
+
+import sys
+sys.path.append('/content/deepseek_experiment')
 
 def load_data(tokenizer, file_path, max_seq_len=128):
     with open(file_path, 'r') as f:
