@@ -14,7 +14,7 @@ world_size = 1
 rank = 0
 block_size = 128
 gemm_impl: Literal["bf16", "fp8"] = "bf16"
-attn_impl: Literal["naive", "absorb"] = "absorb"
+attn_impl: Literal["naive", "absorb"] = "naive"
 
 @dataclass
 class ModelArgs:
