@@ -13,7 +13,7 @@ def load_data(tokenizer, file_path, max_seq_len=128):
     with open(file_path, 'r') as f:
         texts = [line.strip() for line in f.readlines()]
     tokenized = [tokenizer.encode(t, max_length=max_seq_len, truncation=True, padding='max_length') for t in texts]
-    tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+    tokenized.add_special_tokens({'pad_token': '[PAD]'})
 
     tensor_data = torch.tensor(tokenized, dtype=torch.long)
     return DataLoader(tensor_data, batch_size=4, shuffle=True)
