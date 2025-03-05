@@ -21,7 +21,7 @@ def load_data(tokenizer, file_path, max_seq_len=128):
     tokenized = tokenizer(texts, max_length=max_seq_len, truncation=True, padding='max_length')
 
     tensor_data = torch.tensor(tokenized['input_ids'], dtype=torch.long)
-    return DataLoader(tensor_data, batch_size=4, shuffle=True)
+    return DataLoader(tensor_data, batch_size=1, shuffle=True)
 
 
 def train_one_epoch(model, dataloader, optimizer, criterion):
