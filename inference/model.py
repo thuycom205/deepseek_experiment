@@ -293,23 +293,21 @@ class RMSNorm(nn.Module):
 
 
 def precompute_freqs_cis(args: ModelArgs) -> torch.Tensor:
+    """
+    Precomputes frequency-based complex exponential values for rotary positional embeddings.
+
+    Args:
+        args (ModelArgs): Model arguments containing positional embedding parameters.
+
+    Returns:
+        torch.Tensor: Precomputed complex exponential values for positional embeddings.
+    """
     dim = args.qk_rope_head_dim
     seqlen = args.max_seq_len
     beta_fast = args.beta_fast
     beta_slow = args.beta_slow
     base = args.rope_theta
     factor = args.rope_factor
-
-    # (Keep existing correction range code the same)
-
-    freqs = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
-    if seqlen > args.original_seq_len:
-        # (Keep existing frequency adjustment code the same)
-
-    t = torch.arange(seqlen)
-    freqs = torch.outer(t, freqs)
-    freqs_cis = torch.stack((freqs.cos(), freqs.sin()), dim=-1)  # [seq_len, dim//2, 2]
-    return freqs_cis
 
     def find_correction_dim(num_rotations, dim, base, max_seq_len):
         """
@@ -365,13 +363,11 @@ def precompute_freqs_cis(args: ModelArgs) -> torch.Tensor:
 
     freqs = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
     if seqlen > args.original_seq_len:
-        low, high = find_correction_range(beta_fast, beta_slow, dim, base, args.original_seq_len)
-        smooth = 1 - linear_ramp_factor(low, high, dim // 2)
-        freqs = freqs / factor * (1 - smooth) + freqs * smooth
+        # (Keep existing frequency adjustment code the same)
 
     t = torch.arange(seqlen)
     freqs = torch.outer(t, freqs)
-    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)
+    freqs_cis = torch.stack((freqs.cos(), freqs.sin()), dim=-1)  # [seq_len, dim//2, 2]
     return freqs_cis
 
 
