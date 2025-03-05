@@ -293,21 +293,23 @@ class RMSNorm(nn.Module):
 
 
 def precompute_freqs_cis(args: ModelArgs) -> torch.Tensor:
-    """
-    Precomputes frequency-based complex exponential values for rotary positional embeddings.
-
-    Args:
-        args (ModelArgs): Model arguments containing positional embedding parameters.
-
-    Returns:
-        torch.Tensor: Precomputed complex exponential values for positional embeddings.
-    """
     dim = args.qk_rope_head_dim
     seqlen = args.max_seq_len
     beta_fast = args.beta_fast
     beta_slow = args.beta_slow
     base = args.rope_theta
     factor = args.rope_factor
+
+    # (Keep existing correction range code the same)
+
+    freqs = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
+    if seqlen > args.original_seq_len:
+        # (Keep existing frequency adjustment code the same)
+
+    t = torch.arange(seqlen)
+    freqs = torch.outer(t, freqs)
+    freqs_cis = torch.stack((freqs.cos(), freqs.sin()), dim=-1)  # [seq_len, dim//2, 2]
+    return freqs_cis
 
     def find_correction_dim(num_rotations, dim, base, max_seq_len):
         """
@@ -374,22 +376,17 @@ def precompute_freqs_cis(args: ModelArgs) -> torch.Tensor:
 
 
 def apply_rotary_emb(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
-    """
-    Applies rotary positional embeddings to the input tensor.
-
-    Args:
-        x (torch.Tensor): Input tensor with positional embeddings to be applied.
-        freqs_cis (torch.Tensor): Precomputed complex exponential values for positional embeddings.
-
-    Returns:
-        torch.Tensor: Tensor with rotary embeddings applied.
-    """
-    dtype = x.dtype
-    x = torch.view_as_complex(x.float().view(*x.shape[:-1], -1, 2))
-    freqs_cis = freqs_cis.view(1, x.size(1), 1, x.size(-1))
-    y = torch.view_as_real(x * freqs_cis).flatten(3)
-    return y.to(dtype)
-
+    x_ = x.float().reshape(*x.shape[:-1], -1, 2)
+    x1, x2 = x_[..., 0], x_[..., 1]
+    
+    cos = freqs_cis[:, :x.shape[1], None, :, 0]  # [1, seq_len, 1, dim//2]
+    sin = freqs_cis[:, :x.shape[1], None, :, 1]  # [1, seq_len, 1, dim//2]
+    
+    x1_rot = x1 * cos - x2 * sin
+    x2_rot = x1 * sin + x2 * cos
+    
+    x_rotated = torch.stack((x1_rot, x2_rot), dim=-1).flatten(-2)
+    return x_rotated.to(x.dtype)
 
 class MLA(nn.Module):
     """
@@ -472,25 +469,45 @@ class MLA(nn.Module):
             kv = kv.view(bsz, seqlen, self.n_local_heads, self.qk_nope_head_dim + self.v_head_dim)
             k_nope, v = torch.split(kv, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
             k = torch.cat([k_nope, k_pe.expand(-1, -1, self.n_local_heads, -1)], dim=-1)
-            self.k_cache[:bsz, start_pos:end_pos] = k
-            self.v_cache[:bsz, start_pos:end_pos] = v
-            scores = torch.einsum("bshd,bthd->bsht", q, self.k_cache[:bsz, :end_pos]) * self.softmax_scale
+
+            # Use current batch's keys/values directly instead of cache
+            scores = torch.einsum("bshd,bthd->bsht", q, k) * self.softmax_scale
         else:
-            wkv_b = self.wkv_b.weight if self.wkv_b.scale is None else weight_dequant(self.wkv_b.weight, self.wkv_b.scale, block_size) 
+            # Absorb implementation without caching
+            wkv_b = self.wkv_b.weight if self.wkv_b.scale is None else weight_dequant(self.wkv_b.weight, self.wkv_b.scale, block_size)
             wkv_b = wkv_b.view(self.n_local_heads, -1, self.kv_lora_rank)
+            
+            # Process q_nope and q_pe
             q_nope = torch.einsum("bshd,hdc->bshc", q_nope, wkv_b[:, :self.qk_nope_head_dim])
-            self.kv_cache[:bsz, start_pos:end_pos] = self.kv_norm(kv)
-            self.pe_cache[:bsz, start_pos:end_pos] = k_pe.squeeze(2)
-            scores = (torch.einsum("bshc,btc->bsht", q_nope, self.kv_cache[:bsz, :end_pos]) +
-                      torch.einsum("bshr,btr->bsht", q_pe, self.pe_cache[:bsz, :end_pos])) * self.softmax_scale
+            q_pe = apply_rotary_emb(q_pe, freqs_cis)
+            
+            # Process kv and k_pe
+            kv = self.wkv_a(x)
+            kv, k_pe = torch.split(kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+            k_pe = apply_rotary_emb(k_pe.unsqueeze(2), freqs_cis)
+            
+            # Compute scores directly without caching
+            scores = (
+                torch.einsum("bshc,bthc->bsht", q_nope, kv) +  # q_nope @ k_nope
+                torch.einsum("bshr,bthr->bsht", q_pe, k_pe)    # q_pe @ k_pe
+            ) * self.softmax_scale
+
+        # Apply mask if provided
         if mask is not None:
             scores += mask.unsqueeze(1)
+        
+        # Softmax and attention output
         scores = scores.softmax(dim=-1, dtype=torch.float32).type_as(x)
+        
         if attn_impl == "naive":
-            x = torch.einsum("bsht,bthd->bshd", scores, self.v_cache[:bsz, :end_pos])
+            # Directly use current batch's values
+            x = torch.einsum("bsht,bthd->bshd", scores, v)
         else:
-            x = torch.einsum("bsht,btc->bshc", scores, self.kv_cache[:bsz, :end_pos])
+            # Absorb implementation: compute output directly
+            x = torch.einsum("bsht,bthc->bshc", scores, kv)
             x = torch.einsum("bshc,hdc->bshd", x, wkv_b[:, -self.v_head_dim:])
+        
+        # Final output projection
         x = self.wo(x.flatten(2))
         return x
 

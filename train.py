@@ -59,11 +59,14 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device):
     for batch in dataloader:
         batch = batch.to(device)
         optimizer.zero_grad()
-        logits = model(batch)
-
-        # Shift batch to predict next token (causal language modeling)
-        loss = criterion(logits.view(-1, logits.size(-1)), batch.view(-1))
+        
+        # Forward pass with full sequence
+        logits = model(batch[:, :-1])  # Exclude last token for inputs
+        targets = batch[:, 1:].contiguous().view(-1)  # Predict next tokens
+        
+        loss = criterion(logits.view(-1, logits.size(-1)), targets)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
 
         print(f"Loss: {loss.item()}")
