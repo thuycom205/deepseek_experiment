@@ -511,7 +511,7 @@ class MLA(nn.Module):
                         
             # Compute scores directly without caching
             scores = (
-                torch.einsum("bshc,bthc->bsht", q_nope, kv) +  # q_nope @ k_nope
+                torch.einsum("bshc,bthc->bsht", q_nope, k_nope) +  # q_nope @ k_nope
                 torch.einsum("bshr,bthr->bsht", q_pe, k_pe)    # q_pe @ k_pe
             ) * self.softmax_scale
 
