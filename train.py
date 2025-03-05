@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
 import sys
+from inference.model import Transformer, ModelArgs
 
 from datasets import load_dataset  # Using Hugging Face Datasets
 
