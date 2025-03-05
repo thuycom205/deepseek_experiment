@@ -89,10 +89,10 @@ def main():
         moe_inter_dim=128,
         n_layers=4,
         n_heads=4,
-        qk_nope_head_dim=128,
-        v_head_dim=128,
-        qk_rope_head_dim=64,
-        kv_lora_rank=960,
+        kv_lora_rank=512,
+        qk_rope_head_dim=64,  # total is 512+64=576
+  qk_nope_head_dim=64,  # so 64+80=144
+  v_head_dim=80,
         n_routed_experts=4,
         n_shared_experts=1,
         n_activated_experts=2,
