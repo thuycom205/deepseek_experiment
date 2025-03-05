@@ -58,7 +58,7 @@ def load_data(file_path, max_seq_len=128):
 def train_one_epoch(model, dataloader, optimizer, criterion):
     model.train()
     for batch in dataloader:
-        batch = batch.cuda().to(torch.bfloat16)
+        batch = batch.cuda()
         optimizer.zero_grad()
         logits = model(batch)
 
@@ -89,7 +89,8 @@ def main():
 
 
     
-    model = Transformer(args).cuda()
+    model = Transformer(args).cuda().to(torch.bfloat16)
+
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
     criterion = torch.nn.CrossEntropyLoss()
