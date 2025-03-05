@@ -363,7 +363,9 @@ def precompute_freqs_cis(args: ModelArgs) -> torch.Tensor:
 
     freqs = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
     if seqlen > args.original_seq_len:
-        # (Keep existing frequency adjustment code the same)
+        low, high = find_correction_range(beta_fast, beta_slow, dim, base, args.original_seq_len)
+        smooth = 1 - linear_ramp_factor(low, high, dim // 2)
+        freqs = freqs / factor * (1 - smooth) + freqs * smooth
 
     t = torch.arange(seqlen)
     freqs = torch.outer(t, freqs)
