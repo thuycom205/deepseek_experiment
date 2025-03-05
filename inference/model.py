@@ -374,16 +374,30 @@ def precompute_freqs_cis(args: ModelArgs) -> torch.Tensor:
 
 
 def apply_rotary_emb(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
-    x_ = x.float().reshape(*x.shape[:-1], -1, 2)
-    x1, x2 = x_[..., 0], x_[..., 1]
-    
-    cos = freqs_cis[:, :x.shape[1], None, :, 0]  # [1, seq_len, 1, dim//2]
-    sin = freqs_cis[:, :x.shape[1], None, :, 1]  # [1, seq_len, 1, dim//2]
-    
+    """
+    Applies rotary positional embeddings to the input tensor.
+
+    Args:
+        x (torch.Tensor): Input tensor of shape [batch_size, seq_len, n_heads, head_dim].
+        freqs_cis (torch.Tensor): Precomputed frequency tensor of shape [seq_len, head_dim//2, 2].
+
+    Returns:
+        torch.Tensor: Tensor with rotary embeddings applied.
+    """
+    # Reshape x to separate real and imaginary parts
+    x_ = x.float().reshape(*x.shape[:-1], -1, 2)  # [batch_size, seq_len, n_heads, head_dim//2, 2]
+    x1, x2 = x_[..., 0], x_[..., 1]  # Split into real and imaginary parts
+
+    # Extract cosine and sine components from freqs_cis
+    cos = freqs_cis[None, :x.shape[1], None, :, 0]  # [1, seq_len, 1, head_dim//2]
+    sin = freqs_cis[None, :x.shape[1], None, :, 1]  # [1, seq_len, 1, head_dim//2]
+
+    # Apply rotary embeddings
     x1_rot = x1 * cos - x2 * sin
     x2_rot = x1 * sin + x2 * cos
-    
-    x_rotated = torch.stack((x1_rot, x2_rot), dim=-1).flatten(-2)
+
+    # Combine and reshape back to original shape
+    x_rotated = torch.stack((x1_rot, x2_rot), dim=-1).flatten(-2)  # [batch_size, seq_len, n_heads, head_dim]
     return x_rotated.to(x.dtype)
 
 class MLA(nn.Module):
