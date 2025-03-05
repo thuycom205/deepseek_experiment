@@ -58,7 +58,7 @@ def load_data(file_path, max_seq_len=128):
 def train_one_epoch(model, dataloader, optimizer, criterion):
     model.train()
     for batch in dataloader:
-        batch = batch.cuda()
+        batch = batch.cuda().to(torch.bfloat16)
         optimizer.zero_grad()
         logits = model(batch)
 
