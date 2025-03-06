@@ -24,6 +24,8 @@ class SimpleTokenizer:
                     self.reverse_vocab[idx] = token
 
     def encode(self, text, max_length=128):
+        # Add simple normalization
+        text = text.lower().replace('\n', ' ').replace('\t', ' ')
         tokens = text.split()[:max_length]
         return [self.vocab.get(token, self.vocab[self.unk_token]) for token in tokens] + [0]*(max_length - len(tokens))
 
@@ -47,7 +49,10 @@ class TextDataset(Dataset):
 def load_wikitext2(max_seq_len=128):
     # Load dataset from Hugging Face
     dataset = load_dataset("wikitext", "wikitext-2-raw-v1")
-    texts = [text for text in dataset["train"]["text"] if text.strip()]
+    # texts = [text for text in dataset["train"]["text"] if text.strip()]
+    
+    texts = [text for text in dataset["train"]["text"] 
+             if text.strip() and len(text.split()) > 3] # Min 3 tokens
     
      
     # Take first 200 non-empty texts

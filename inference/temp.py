@@ -1,15 +1,13 @@
-# ---- Modified Data Loading with 200 samples ----
-def load_wikitext2(max_seq_len=128):
-    # Load dataset from Hugging Face
-    dataset = load_dataset("wikitext", "wikitext-2-raw-v1")
+def train_one_epoch(...):
+    scaler = torch.cuda.amp.GradScaler()  # Add this
     
-    # Take first 200 non-empty texts
-    texts = [text for text in dataset["train"]["text"] if text.strip()][:200]  # <-- Changed here
-    
-    # Initialize tokenizer
-    tokenizer = SimpleTokenizer()
-    tokenizer.add_tokens(texts)
-    
-    # Create dataloader
-    dataset = TextDataset(texts, tokenizer, max_seq_len=max_seq_len)
-    return DataLoader(dataset, batch_size=1, shuffle=True), tokenizer
+    for batch in dataloader:
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+            logits = model(batch[:, :-1])
+            loss = criterion(...)
+        
+        scaler.scale(loss).backward()  # Instead of loss.backward()
+        scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        scaler.step(optimizer)
+        scaler.update()
