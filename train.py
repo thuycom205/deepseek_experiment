@@ -209,7 +209,20 @@ def main():
 
     for epoch in range(3):
         train_one_epoch(model, dataloader, optimizer, criterion, device)
-        torch.save(model.state_dict(), f'checkpoint_epoch{epoch}.pt')
+        metadata = {
+                    "args": args,  # the ModelArgs instance
+                    "vocab": tokenizer.vocab,
+                    "reverse_vocab": tokenizer.reverse_vocab
+                }
+        # torch.save(model.state_dict(), f'checkpoint_epoch{epoch}.pt')
+        torch.save(
+                        {
+                            "model_state_dict": model.state_dict(),
+                            "metadata": metadata
+                        },
+                        f'checkpoint_epoch{epoch}.pt'
+                    )
+
 
 if __name__ == "__main__":
     main()
