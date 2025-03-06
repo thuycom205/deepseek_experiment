@@ -4,7 +4,7 @@ import sys
 
 # Adjust these imports according to your actual file structure
 from inference.model import Transformer, ModelArgs
-from train_script import SimpleTokenizer  # <-- Replace 'train_script' with the actual filename that defines SimpleTokenizer
+from train import SimpleTokenizer  # <-- Replace 'train_script' with the actual filename that defines SimpleTokenizer
 
 ###############################################################################
 # 1) Load Model + Tokenizer
