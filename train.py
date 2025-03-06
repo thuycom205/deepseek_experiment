@@ -118,7 +118,10 @@ def load_wikitext2(max_seq_len=128):
     #     print(f"Loss: {loss.item()}")
 # ---- Modified Main Function ----
 def train_one_epoch(model, dataloader, optimizer, criterion, device):
-    scaler = GradScaler()  # Initialize gradient scaler
+    # Xác định device type và dtype
+    device_type = 'cuda' if device.type == 'cuda' else 'cpu'
+    scaler = torch.amp.GradScaler(device_type) if device_type == 'cuda' else None
+    
     model.train()
     total_loss = 0
     total_items = 0
@@ -127,35 +130,36 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device):
         batch = batch.to(device)
         optimizer.zero_grad()
         
-        # Wrap forward pass in autocast
-        with autocast(device_type='cuda', dtype=torch.bfloat16 if device.type == 'cuda' else torch.float32):
+        # Sử dụng autocast với cú pháp mới
+        with torch.amp.autocast(device_type=device_type, dtype=torch.bfloat16 if device_type == 'cuda' else torch.float32):
             logits = model(batch[:, :-1])
             targets = batch[:, 1:].contiguous().view(-1)
             loss = criterion(logits.view(-1, logits.size(-1)), targets)
         
-        # Scale loss and backpropagate
-        scaler.scale(loss).backward()
+        # Xử lý gradient cho từng loại device
+        if device_type == 'cuda':
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
         
-        # Unscale gradients before clipping
-        scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        
-        # Update weights
-        scaler.step(optimizer)
-        scaler.update()
-        
-        # Accumulate loss
+        # Theo dõi loss
         total_loss += loss.item()
         total_items += 1
         
-        # Print every 100 batches
+        # In thông tin mỗi 100 batch
         if batch_idx % 100 == 0:
             avg_loss = total_loss / total_items
             print(f"Batch {batch_idx}: Loss {avg_loss:.4f}")
             total_loss = 0
             total_items = 0
     
-    # Final epoch loss
+    # Tính loss trung bình epoch
     epoch_loss = total_loss / len(dataloader)
     print(f"\nEpoch Average Loss: {epoch_loss:.4f}\n")
 def main():
