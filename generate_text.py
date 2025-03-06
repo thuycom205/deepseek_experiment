@@ -131,7 +131,7 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=30, device='cuda'):
     
     # Move to tensor
     
-    input_tensor = torch.tensor([generated_ids], dtype="bf16", device=device)
+    input_tensor = torch.tensor([generated_ids], dtype=torch.bfloat16, device=device)
     
     for _ in range(max_new_tokens):
         # Forward pass
@@ -149,7 +149,7 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=30, device='cuda'):
         generated_ids.append(next_token_id)
         
         # Update input_tensor for next iteration
-        input_tensor = torch.tensor([generated_ids], dtype="bf16", device=device)
+        input_tensor = torch.tensor([generated_ids], dtype=torch.bfloat16, device=device)
     
     # Decode the resulting token IDs to string
     output_text = tokenizer.decode(generated_ids)
