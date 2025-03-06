@@ -47,7 +47,12 @@ class TextDataset(Dataset):
 def load_wikitext2(max_seq_len=128):
     # Load dataset from Hugging Face
     dataset = load_dataset("wikitext", "wikitext-2-raw-v1")
-    texts = [text for text in dataset["train"]["text"] if text.strip()]
+    # texts = [text for text in dataset["train"]["text"] if text.strip()]
+    
+     
+    # Take first 200 non-empty texts
+    texts = [text for text in dataset["train"]["text"] if text.strip()][:200]  # <-- Changed here
+    
     
     # Initialize tokenizer
     tokenizer = SimpleTokenizer()
@@ -55,25 +60,56 @@ def load_wikitext2(max_seq_len=128):
     
     # Create dataloader
     dataset = TextDataset(texts, tokenizer, max_seq_len=max_seq_len)
-    return DataLoader(dataset, batch_size=1, shuffle=True), tokenizer
+    return DataLoader(dataset, batch_size=32, shuffle=True), tokenizer
 
 # Rest of the code remains the same as previous version...
 def train_one_epoch(model, dataloader, optimizer, criterion, device):
     model.train()
-    for batch in dataloader:
+    total_loss = 0
+    total_items = 0
+    for batch_idx, batch in enumerate(dataloader):
         batch = batch.to(device)
         optimizer.zero_grad()
         
-        # Forward pass with full sequence
-        logits = model(batch[:, :-1])  # Exclude last token for inputs
-        targets = batch[:, 1:].contiguous().view(-1)  # Predict next tokens
+        # Forward pass
+        logits = model(batch[:, :-1])
+        targets = batch[:, 1:].contiguous().view(-1)
         
         loss = criterion(logits.view(-1, logits.size(-1)), targets)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
 
-        print(f"Loss: {loss.item()}")
+        # Accumulate loss
+        total_loss += loss.item()
+        total_items += 1
+        
+        # Print every 100 batches
+        if batch_idx % 100 == 0:
+            avg_loss = total_loss / total_items
+            print(f"Batch {batch_idx}: Loss {avg_loss:.4f}")
+            total_loss = 0
+            total_items = 0
+
+    
+    # Final epoch loss
+    epoch_loss = total_loss / len(dataloader)
+    print(f"\nEpoch Average Loss: {epoch_loss:.4f}\n") 
+    
+    # for batch in dataloader:
+    #     batch = batch.to(device)
+    #     optimizer.zero_grad()
+        
+    #     # Forward pass with full sequence
+    #     logits = model(batch[:, :-1])  # Exclude last token for inputs
+    #     targets = batch[:, 1:].contiguous().view(-1)  # Predict next tokens
+        
+    #     loss = criterion(logits.view(-1, logits.size(-1)), targets)
+    #     loss.backward()
+    #     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+    #     optimizer.step()
+
+    #     print(f"Loss: {loss.item()}")
 # ---- Modified Main Function ----
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
