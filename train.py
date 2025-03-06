@@ -175,6 +175,87 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device):
     # Final epoch loss
     epoch_loss = total_loss / len(dataloader)
     print(f"\nEpoch Average Loss: {epoch_loss:.4f}\n")
+
+
+# ---- Updated Generation Functions ----
+def generate(prompt: str, model: Transformer, tokenizer: SimpleTokenizer, 
+             max_length: int = 50, temperature: float = 0.7, top_k: int = 50):
+    """
+    Generate text continuation from a prompt using trained model
+    """
+    model.eval()
+    
+    # Encode prompt with proper length handling
+    input_ids = tokenizer.encode(prompt, max_length=model.args.max_seq_len)
+    generated = torch.tensor([input_ids], device=next(model.parameters()).device)
+    
+    with torch.no_grad():
+        for _ in range(max_length):
+            # Model expects sequences of max_seq_len - truncate if needed
+            inputs = generated[:, -model.args.max_seq_len:]
+            
+            # Get predictions
+            logits = model(inputs)
+            
+            # Focus on last token logits
+            next_token_logits = logits[0, -1, :] / temperature
+            
+            # Apply top-k filtering
+            if top_k > 0:
+                topk_values, topk_indices = torch.topk(next_token_logits, top_k)
+                
+                # Create mask for tokens not in top-k
+                mask = torch.ones_like(next_token_logits, dtype=torch.bool)
+                mask[topk_indices] = False  # Keep top-k tokens
+                
+                # Apply mask to logits
+                next_token_logits[mask] = -float('Inf')
+            
+            # Sample from distribution
+            probs = F.softmax(next_token_logits, dim=-1)
+            next_token = torch.multinomial(probs, num_samples=1)
+            
+            # Append to generated sequence
+            generated = torch.cat([generated, next_token.unsqueeze(0)], dim=1)
+            
+            # Break if EOS token generated
+            if next_token.item() == tokenizer.vocab.get("[EOS]", -1):
+                break
+                
+    return tokenizer.decode(generated[0].tolist())
+
+def test_inference(tokenizer: SimpleTokenizer):
+    """
+    Test trained model with generation capabilities
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Load best checkpoint
+    checkpoint = torch.load('checkpoint_epoch2.pt', map_location=device)
+    
+    # Reconstruct model with original parameters
+    args = checkpoint['args']
+    model = Transformer(args).to(device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    
+    # Set model to evaluation mode
+    model = model.to(torch.bfloat16 if args.dtype == "bf16" else torch.float32)
+    model.eval()
+    
+    # Test prompts
+    prompts = [
+        "The meaning of life is",
+        "Artificial intelligence will",
+        "In the future, quantum computing",
+        "To solve climate change, we need"
+    ]
+    
+    for prompt in prompts:
+        generated = generate(prompt, model, tokenizer, max_length=100)
+        print(f"\nPrompt: {prompt}")
+        print(f"Generated: {generated}")
+        print("="*80)
+            
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
@@ -228,7 +309,15 @@ def main():
 
     for epoch in range(3):
         train_one_epoch(model, dataloader, optimizer, criterion, device)
-        torch.save(model.state_dict(), f'checkpoint_epoch{epoch}.pt')
-
+        torch.save({
+                    'model_state_dict': model.state_dict(),
+                    'args': args,
+                    'tokenizer_vocab': tokenizer.vocab,
+                    'tokenizer_reverse_vocab': tokenizer.reverse_vocab
+                }, f'checkpoint_epoch{epoch}.pt')
+    
+    test_inference(tokenizer)
+    
+        
 if __name__ == "__main__":
     main()
