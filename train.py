@@ -183,24 +183,44 @@ def main():
     dataloader, tokenizer = load_wikitext2()
 
     # Rest of the original model setup
+    # args = ModelArgs(
+    #     max_batch_size=1,
+    #     max_seq_len=512,
+    #     vocab_size=len(tokenizer.vocab),
+    #     dim=256,
+    #     inter_dim=512,
+    #     moe_inter_dim=128,
+    #     n_layers=4,
+    #     n_heads=4,
+    #     kv_lora_rank=512,
+    #     qk_rope_head_dim=64,
+    #     qk_nope_head_dim=64,
+    #     v_head_dim=80,
+    #     n_routed_experts=4,
+    #     n_shared_experts=1,
+    #     n_activated_experts=2,
+    #     dtype="bf16" if dtype == torch.bfloat16 else "fp32",
+    # )
+    
     args = ModelArgs(
-        max_batch_size=1,
-        max_seq_len=512,
-        vocab_size=len(tokenizer.vocab),
-        dim=256,
-        inter_dim=512,
-        moe_inter_dim=128,
-        n_layers=4,
-        n_heads=4,
-        kv_lora_rank=512,
-        qk_rope_head_dim=64,
-        qk_nope_head_dim=64,
-        v_head_dim=80,
-        n_routed_experts=4,
-        n_shared_experts=1,
-        n_activated_experts=2,
-        dtype="bf16" if dtype == torch.bfloat16 else "fp32",
-    )
+    max_batch_size=32,
+    max_seq_len=512,
+    vocab_size=len(tokenizer.vocab),
+    dim=512,          # Increased from 256 to 512
+    inter_dim=1024,   # Increased from 512 to 1024
+    moe_inter_dim=128,
+    n_layers=8,       # Increased from 4 to 8
+    n_heads=8,        # (Optional) If you double `dim`, it’s often good to adjust heads
+    kv_lora_rank=512,
+    qk_rope_head_dim=64,
+    qk_nope_head_dim=64,
+    v_head_dim=80,
+    n_routed_experts=4,
+    n_shared_experts=1,
+    n_activated_experts=2,
+    dtype="bf16" if dtype == torch.bfloat16 else "fp32",
+)
+
 
     model = Transformer(args).to(device).to(dtype)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.01)
