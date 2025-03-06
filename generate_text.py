@@ -163,7 +163,7 @@ def main():
     model, tokenizer = load_model_and_tokenizer(checkpoint_path, device=device)
     
     # Provide a prompt
-    prompt = "Once upon a time"
+    prompt = "What is capital of Vietnam ?"
     
     # Generate text
     output = generate_text(model, tokenizer, prompt, max_new_tokens=20, device=device)
