@@ -120,7 +120,10 @@ def load_wikitext2(max_seq_len=128):
 def train_one_epoch(model, dataloader, optimizer, criterion, device):
     # Determine device type and dtype
     device_type = 'cuda' if device.type == 'cuda' else 'cpu'
-    use_scaler = device_type == 'cuda' and model.dtype != torch.bfloat16  # Skip scaler for BF16
+    
+    # Access dtype from model's configuration
+    model_dtype = torch.bfloat16 if model.args.dtype == "bf16" else torch.float32
+    use_scaler = device_type == 'cuda' and model_dtype != torch.bfloat16  # Skip scaler for BF16
     
     # Initialize GradScaler only if needed
     scaler = torch.amp.GradScaler(enabled=use_scaler) if device_type == 'cuda' else None
@@ -134,7 +137,7 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device):
         optimizer.zero_grad()
         
         # Use autocast with the correct dtype
-        with torch.amp.autocast(device_type=device_type, dtype=model.dtype):
+        with torch.amp.autocast(device_type=device_type, dtype=model_dtype):
             logits = model(batch[:, :-1])
             targets = batch[:, 1:].contiguous().view(-1)
             loss = criterion(logits.view(-1, logits.size(-1)), targets)
