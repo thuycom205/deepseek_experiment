@@ -47,11 +47,11 @@ class TextDataset(Dataset):
 def load_wikitext2(max_seq_len=128):
     # Load dataset from Hugging Face
     dataset = load_dataset("wikitext", "wikitext-2-raw-v1")
-    # texts = [text for text in dataset["train"]["text"] if text.strip()]
+    texts = [text for text in dataset["train"]["text"] if text.strip()]
     
      
     # Take first 200 non-empty texts
-    texts = [text for text in dataset["train"]["text"] if text.strip()][:200]  # <-- Changed here
+    # texts = [text for text in dataset["train"]["text"] if text.strip()][:200]  # <-- Changed here
     
     
     # Initialize tokenizer
