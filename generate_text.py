@@ -104,6 +104,8 @@ def load_model_and_tokenizer(checkpoint_path, device="cuda"):
     # 3) Create the model using those exact arguments
     model = Transformer(saved_args).to(device)
     model.load_state_dict(state_dict)
+    
+    model = model.to(torch.bfloat16)  # Make sure weights are in bf16
     model.eval()
     
     # 4) Reconstruct the tokenizer
@@ -128,7 +130,8 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=30, device='cuda'):
     generated_ids = input_ids[:]
     
     # Move to tensor
-    input_tensor = torch.tensor([generated_ids], dtype=torch.long, device=device)
+    
+    input_tensor = torch.tensor([generated_ids], dtype="bf16", device=device)
     
     for _ in range(max_new_tokens):
         # Forward pass
@@ -146,7 +149,7 @@ def generate_text(model, tokenizer, prompt, max_new_tokens=30, device='cuda'):
         generated_ids.append(next_token_id)
         
         # Update input_tensor for next iteration
-        input_tensor = torch.tensor([generated_ids], dtype=torch.long, device=device)
+        input_tensor = torch.tensor([generated_ids], dtype="bf16", device=device)
     
     # Decode the resulting token IDs to string
     output_text = tokenizer.decode(generated_ids)
