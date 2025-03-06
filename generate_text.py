@@ -209,7 +209,7 @@ def main():
     model, tokenizer = load_model_and_tokenizer(checkpoint_path, device=device)
     
     # Provide a prompt
-    prompt = "Vietnam is a"
+    prompt = "This is a story about a brave knight who"
     
     # Generate text
     output = generate_text(model, tokenizer, prompt, max_new_tokens=20, device=device)
