@@ -5,6 +5,7 @@ from inference.model import Transformer, ModelArgs
 
 from datasets import load_dataset  # Using Hugging Face Datasets
 from torch.cuda.amp import autocast, GradScaler
+import torch.nn.functional as F
 
 sys.path.append('/content/deepseek_experiment')
 
