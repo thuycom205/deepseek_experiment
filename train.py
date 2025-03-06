@@ -4,6 +4,7 @@ import sys
 from inference.model import Transformer, ModelArgs
 
 from datasets import load_dataset  # Using Hugging Face Datasets
+from torch.cuda.amp import autocast, GradScaler
 
 sys.path.append('/content/deepseek_experiment')
 
@@ -68,38 +69,38 @@ def load_wikitext2(max_seq_len=128):
     return DataLoader(dataset, batch_size=32, shuffle=True), tokenizer
 
 # Rest of the code remains the same as previous version...
-def train_one_epoch(model, dataloader, optimizer, criterion, device):
-    model.train()
-    total_loss = 0
-    total_items = 0
-    for batch_idx, batch in enumerate(dataloader):
-        batch = batch.to(device)
-        optimizer.zero_grad()
+# def train_one_epoch(model, dataloader, optimizer, criterion, device):
+#     model.train()
+#     total_loss = 0
+#     total_items = 0
+#     for batch_idx, batch in enumerate(dataloader):
+#         batch = batch.to(device)
+#         optimizer.zero_grad()
         
-        # Forward pass
-        logits = model(batch[:, :-1])
-        targets = batch[:, 1:].contiguous().view(-1)
+#         # Forward pass
+#         logits = model(batch[:, :-1])
+#         targets = batch[:, 1:].contiguous().view(-1)
         
-        loss = criterion(logits.view(-1, logits.size(-1)), targets)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
+#         loss = criterion(logits.view(-1, logits.size(-1)), targets)
+#         loss.backward()
+#         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+#         optimizer.step()
 
-        # Accumulate loss
-        total_loss += loss.item()
-        total_items += 1
+#         # Accumulate loss
+#         total_loss += loss.item()
+#         total_items += 1
         
-        # Print every 100 batches
-        if batch_idx % 100 == 0:
-            avg_loss = total_loss / total_items
-            print(f"Batch {batch_idx}: Loss {avg_loss:.4f}")
-            total_loss = 0
-            total_items = 0
+#         # Print every 100 batches
+#         if batch_idx % 100 == 0:
+#             avg_loss = total_loss / total_items
+#             print(f"Batch {batch_idx}: Loss {avg_loss:.4f}")
+#             total_loss = 0
+#             total_items = 0
 
     
-    # Final epoch loss
-    epoch_loss = total_loss / len(dataloader)
-    print(f"\nEpoch Average Loss: {epoch_loss:.4f}\n") 
+#     # Final epoch loss
+#     epoch_loss = total_loss / len(dataloader)
+#     print(f"\nEpoch Average Loss: {epoch_loss:.4f}\n") 
     
     # for batch in dataloader:
     #     batch = batch.to(device)
@@ -116,6 +117,47 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device):
 
     #     print(f"Loss: {loss.item()}")
 # ---- Modified Main Function ----
+def train_one_epoch(model, dataloader, optimizer, criterion, device):
+    scaler = GradScaler()  # Initialize gradient scaler
+    model.train()
+    total_loss = 0
+    total_items = 0
+    
+    for batch_idx, batch in enumerate(dataloader):
+        batch = batch.to(device)
+        optimizer.zero_grad()
+        
+        # Wrap forward pass in autocast
+        with autocast(device_type='cuda', dtype=torch.bfloat16 if device.type == 'cuda' else torch.float32):
+            logits = model(batch[:, :-1])
+            targets = batch[:, 1:].contiguous().view(-1)
+            loss = criterion(logits.view(-1, logits.size(-1)), targets)
+        
+        # Scale loss and backpropagate
+        scaler.scale(loss).backward()
+        
+        # Unscale gradients before clipping
+        scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        
+        # Update weights
+        scaler.step(optimizer)
+        scaler.update()
+        
+        # Accumulate loss
+        total_loss += loss.item()
+        total_items += 1
+        
+        # Print every 100 batches
+        if batch_idx % 100 == 0:
+            avg_loss = total_loss / total_items
+            print(f"Batch {batch_idx}: Loss {avg_loss:.4f}")
+            total_loss = 0
+            total_items = 0
+    
+    # Final epoch loss
+    epoch_loss = total_loss / len(dataloader)
+    print(f"\nEpoch Average Loss: {epoch_loss:.4f}\n")
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
